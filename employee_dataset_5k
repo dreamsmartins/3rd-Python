@@ -1,0 +1,324 @@
+import csv
+import random
+from datetime import datetime, timedelta
+from faker import Faker
+
+# Initialize Faker for generating realistic data
+fake = Faker()
+Faker.seed(42)  # For reproducible results
+random.seed(42)
+
+# Configuration
+NUM_EMPLOYEES = 5000
+START_EMPLOYEE_ID = 1001
+CURRENT_DATE = datetime(2025, 1, 15)  # Assumed current date
+
+# Department distribution
+DEPARTMENTS = {
+    "Sales": 0.25,
+    "IT": 0.20,
+    "Operations": 0.15,
+    "Marketing": 0.10,
+    "HR": 0.10,
+    "Finance": 0.10,
+    "R&D": 0.05,
+    "Legal": 0.05
+}
+
+# Job titles by department
+JOB_TITLES = {
+    "Sales": ["Sales Representative", "Senior Sales Representative", "Sales Manager", 
+              "Account Executive", "Senior Account Executive", "Sales Director", 
+              "Sales Operations Analyst", "Regional Sales Manager", "Key Account Manager"],
+    "IT": ["Software Engineer", "Senior Software Engineer", "Lead Software Engineer",
+           "IT Support Specialist", "Network Administrator", "Systems Analyst", 
+           "Database Administrator", "Cloud Engineer", "IT Manager", "Cybersecurity Analyst",
+           "DevOps Engineer", "Solutions Architect", "Technical Lead"],
+    "Operations": ["Operations Coordinator", "Operations Manager", "Senior Operations Manager",
+                   "Logistics Specialist", "Supply Chain Analyst", "Plant Manager", 
+                   "Operations Analyst", "Process Improvement Specialist"],
+    "Marketing": ["Marketing Specialist", "Digital Marketing Manager", "Content Creator", 
+                  "SEO Analyst", "Product Marketing Manager", "Marketing Director",
+                  "Social Media Manager", "Brand Manager", "Marketing Coordinator"],
+    "HR": ["HR Generalist", "HR Business Partner", "Recruiter", "Senior Recruiter",
+           "Talent Acquisition Manager", "Compensation Analyst", "HR Manager", 
+           "HR Coordinator", "Learning & Development Specialist"],
+    "Finance": ["Accountant", "Senior Accountant", "Financial Analyst", 
+                "Senior Financial Analyst", "Finance Manager", "Controller",
+                "Budget Analyst", "Tax Specialist", "Accounts Payable Specialist"],
+    "R&D": ["Research Scientist", "Senior Research Scientist", "Lab Technician", 
+            "R&D Engineer", "Product Developer", "Research Manager", "Innovation Specialist"],
+    "Legal": ["Paralegal", "Corporate Counsel", "Legal Secretary", "Legal Manager",
+              "Compliance Specialist", "Contract Specialist"]
+}
+
+# Salary ranges by seniority level (inferred from job titles)
+SALARY_RANGES = {
+    "entry": (35000, 55000),
+    "mid": (50000, 85000),
+    "senior": (75000, 150000)
+}
+
+# Performance ratings
+PERFORMANCE_RATINGS = ["Exceeds Expectations", "Meets Expectations", "Needs Improvement", "Not Applicable"]
+PERFORMANCE_WEIGHTS = [0.225, 0.625, 0.125, 0.025]
+
+# Office locations
+OFFICE_LOCATIONS = ["London", "New York", "Berlin", "San Francisco", "Singapore", "Remote"]
+LOCATION_WEIGHTS = [0.2, 0.2, 0.18, 0.18, 0.19, 0.05]
+
+# Gender distribution
+GENDERS = ["Male", "Female", "Other"]
+GENDER_WEIGHTS = [0.5, 0.485, 0.015]
+
+def get_seniority_level(job_title):
+    """Determine seniority level based on job title"""
+    title_lower = job_title.lower()
+    if any(word in title_lower for word in ["senior", "lead", "manager", "director", "controller", "principal"]):
+        return "senior"
+    elif any(word in title_lower for word in ["specialist", "analyst", "engineer", "representative", "executive"]):
+        return "mid"
+    else:
+        return "entry"
+
+def generate_hire_date():
+    """Generate realistic hire date weighted towards recent years"""
+    # Weight more recent years higher
+    year_weights = []
+    years = list(range(2010, 2025))
+    for year in years:
+        if year >= 2020:
+            weight = 3
+        elif year >= 2015:
+            weight = 2
+        else:
+            weight = 1
+        year_weights.append(weight)
+    
+    chosen_year = random.choices(years, weights=year_weights)[0]
+    start_date = datetime(chosen_year, 1, 1)
+    end_date = datetime(chosen_year, 12, 31)
+    
+    if chosen_year == 2024:
+        end_date = datetime(2024, 12, 31)
+    
+    random_date = start_date + timedelta(days=random.randint(0, (end_date - start_date).days))
+    return random_date
+
+def generate_termination_date(hire_date):
+    """Generate termination date for terminated employees"""
+    if random.random() > 0.25:  # 75% active employees
+        return None
+    
+    # Termination date should be after hire date but before current date
+    min_employment_days = 30  # At least 30 days of employment
+    latest_termination = CURRENT_DATE - timedelta(days=1)
+    
+    earliest_termination = hire_date + timedelta(days=min_employment_days)
+    if earliest_termination >= latest_termination:
+        return None  # Keep employee active if constraints don't work
+    
+    days_range = (latest_termination - earliest_termination).days
+    random_days = random.randint(0, days_range)
+    return earliest_termination + timedelta(days=random_days)
+
+def generate_birth_date(hire_date):
+    """Generate realistic birth date based on hire date"""
+    # Age at hire should be between 18 and 65
+    min_age_at_hire = 18
+    max_age_at_hire = 65
+    
+    age_at_hire = random.randint(min_age_at_hire, max_age_at_hire)
+    birth_year = hire_date.year - age_at_hire
+    
+    # Generate random month and day
+    birth_date = datetime(birth_year, random.randint(1, 12), random.randint(1, 28))
+    return birth_date
+
+def generate_salary(department, job_title, hire_date, is_terminated):
+    """Generate realistic salary based on role and experience"""
+    seniority = get_seniority_level(job_title)
+    base_min, base_max = SALARY_RANGES[seniority]
+    
+    # Adjust for department
+    dept_multipliers = {
+        "Sales": 1.1, "IT": 1.15, "Finance": 1.05, "Legal": 1.2,
+        "R&D": 1.1, "Marketing": 1.0, "Operations": 0.95, "HR": 0.95
+    }
+    
+    multiplier = dept_multipliers.get(department, 1.0)
+    
+    # Adjust for experience (years since hire)
+    years_experience = (CURRENT_DATE - hire_date).days / 365.25
+    experience_bonus = min(years_experience * 0.03, 0.4)  # Max 40% bonus for experience
+    
+    final_min = int(base_min * multiplier * (1 + experience_bonus))
+    final_max = int(base_max * multiplier * (1 + experience_bonus))
+    
+    # Slight reduction for terminated employees (on average)
+    if is_terminated and random.random() < 0.3:
+        final_min = int(final_min * 0.9)
+        final_max = int(final_max * 0.9)
+    
+    return random.randint(final_min, final_max)
+
+def generate_training_hours(department, job_title, is_terminated):
+    """Generate training hours based on role and status"""
+    if random.random() < 0.1:  # 10% have 0 hours
+        return 0
+    
+    # Base range
+    if get_seniority_level(job_title) == "senior" or department in ["IT", "R&D"]:
+        base_range = (15, 60)
+    else:
+        base_range = (10, 40)
+    
+    # High performers occasionally get more training
+    if random.random() < 0.15:
+        base_range = (base_range[0], min(100, base_range[1] + 30))
+    
+    # Terminated employees might have lower training hours
+    if is_terminated and random.random() < 0.4:
+        base_range = (max(0, base_range[0] - 10), base_range[1] - 5)
+    
+    return random.randint(max(0, base_range[0]), base_range[1])
+
+def generate_employee_record(employee_id):
+    """Generate a complete employee record"""
+    # Basic info
+    full_name = fake.name()
+    
+    # Department and job title
+    department = random.choices(list(DEPARTMENTS.keys()), 
+                               weights=list(DEPARTMENTS.values()))[0]
+    job_title = random.choice(JOB_TITLES[department])
+    
+    # Dates
+    hire_date = generate_hire_date()
+    termination_date = generate_termination_date(hire_date)
+    birth_date = generate_birth_date(hire_date)
+    
+    # Other attributes
+    is_terminated = termination_date is not None
+    salary = generate_salary(department, job_title, hire_date, is_terminated)
+    
+    # Performance rating (slightly lower for terminated employees)
+    if is_terminated and random.random() < 0.4:
+        performance_weights_adj = [0.1, 0.5, 0.35, 0.05]  # More "Needs Improvement"
+    else:
+        performance_weights_adj = PERFORMANCE_RATINGS
+    
+    performance_rating = random.choices(PERFORMANCE_RATINGS, 
+                                       weights=performance_weights_adj if is_terminated 
+                                       else PERFORMANCE_WEIGHTS)[0]
+    
+    training_hours = generate_training_hours(department, job_title, is_terminated)
+    office_location = random.choices(OFFICE_LOCATIONS, weights=LOCATION_WEIGHTS)[0]
+    gender = random.choices(GENDERS, weights=GENDER_WEIGHTS)[0]
+    
+    return {
+        "Employee ID": employee_id,
+        "Full Name": full_name,
+        "Department": department,
+        "Job Title": job_title,
+        "Hire Date": hire_date.strftime("%d/%m/%Y"),
+        "Termination Date": termination_date.strftime("%d/%m/%Y") if termination_date else "",
+        "Salary": salary,
+        "Performance Rating (Last Review)": performance_rating,
+        "Training Hours (YTD)": training_hours,
+        "Office Location": office_location,
+        "Gender": gender,
+        "Date of Birth": birth_date.strftime("%d/%m/%Y")
+    }
+
+def generate_dataset():
+    """Generate the complete employee dataset"""
+    print("Generating employee dataset...")
+    
+    employees = []
+    for i in range(NUM_EMPLOYEES):
+        if i % 500 == 0:
+            print(f"Generated {i} employees...")
+        
+        employee_id = START_EMPLOYEE_ID + i
+        employee = generate_employee_record(employee_id)
+        employees.append(employee)
+    
+    return employees
+
+def save_to_csv(employees, filename="employee_dataset.csv"):
+    """Save the dataset to CSV file"""
+    fieldnames = [
+        "Employee ID", "Full Name", "Department", "Job Title", 
+        "Hire Date", "Termination Date", "Salary", 
+        "Performance Rating (Last Review)", "Training Hours (YTD)", 
+        "Office Location", "Gender", "Date of Birth"
+    ]
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(employees)
+    
+    print(f"Dataset saved to {filename}")
+
+def print_summary_statistics(employees):
+    """Print summary statistics about the generated dataset"""
+    print("\n=== DATASET SUMMARY ===")
+    print(f"Total employees: {len(employees)}")
+    
+    # Active vs terminated
+    active = sum(1 for emp in employees if not emp["Termination Date"])
+    terminated = len(employees) - active
+    print(f"Active employees: {active} ({active/len(employees)*100:.1f}%)")
+    print(f"Terminated employees: {terminated} ({terminated/len(employees)*100:.1f}%)")
+    
+    # Department distribution
+    dept_counts = {}
+    for emp in employees:
+        dept = emp["Department"]
+        dept_counts[dept] = dept_counts.get(dept, 0) + 1
+    
+    print("\nDepartment Distribution:")
+    for dept, count in sorted(dept_counts.items()):
+        print(f"  {dept}: {count} ({count/len(employees)*100:.1f}%)")
+    
+    # Gender distribution
+    gender_counts = {}
+    for emp in employees:
+        gender = emp["Gender"]
+        gender_counts[gender] = gender_counts.get(gender, 0) + 1
+    
+    print("\nGender Distribution:")
+    for gender, count in sorted(gender_counts.items()):
+        print(f"  {gender}: {count} ({count/len(employees)*100:.1f}%)")
+    
+    # Office location distribution
+    location_counts = {}
+    for emp in employees:
+        location = emp["Office Location"]
+        location_counts[location] = location_counts.get(location, 0) + 1
+    
+    print("\nOffice Location Distribution:")
+    for location, count in sorted(location_counts.items()):
+        print(f"  {location}: {count} ({count/len(employees)*100:.1f}%)")
+    
+    # Salary statistics
+    salaries = [emp["Salary"] for emp in employees]
+    print(f"\nSalary Statistics:")
+    print(f"  Average: ${sum(salaries)/len(salaries):,.0f}")
+    print(f"  Minimum: ${min(salaries):,.0f}")
+    print(f"  Maximum: ${max(salaries):,.0f}")
+
+if __name__ == "__main__":
+    # Generate the dataset
+    employees = generate_dataset()
+    
+    # Save to CSV
+    save_to_csv(employees)
+    
+    # Print summary statistics
+    print_summary_statistics(employees)
+    
+    print("\nDataset generation complete!")
+    print("Note: You'll need to install the 'faker' library: pip install faker")
